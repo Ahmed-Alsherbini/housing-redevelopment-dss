@@ -270,7 +270,11 @@ def compute_composite(project, indicator_cfgs: list, study, dataset_ctx: dict,
     # Official scorecard: missing indicators remain missing and do not cause
     # the remaining weights to be silently redistributed.
     denominator = 100.0
-    priority_score = round(weighted_sum / denominator, 2) if available_weight > 0 else None
+    # A total out of 100 is only reported when every active indicator is scored.
+    # Partial weighted points remain visible in contributions, but are not
+    # presented as a final project priority score.
+    has_complete_score = available_weight >= total_weight - 1e-9
+    priority_score = round(weighted_sum / denominator, 2) if has_complete_score else None
 
     # Reconcile contributions with the same denominator used by the composite.
     # The previous /100 denominator understated contributions with missing data.
