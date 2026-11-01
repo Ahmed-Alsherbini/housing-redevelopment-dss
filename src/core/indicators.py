@@ -1,4 +1,4 @@
-"""Official 7-indicator framework (Port Said housing redevelopment priority).
+"""Official six-indicator framework (Port Said housing redevelopment priority).
 
 This module defines the immutable BASELINE weights/rubrics. They are copied into
 each new Study's IndicatorConfig rows, where they may be freely edited per-study
@@ -24,7 +24,6 @@ OFFICIAL_INDICATORS = [
         "source_columns": ["الحالة_العامة_للمبني"],
         "rubric": {
             "map": {
-                "جيد": 20,
                 "متوسط": 50,
                 "ردئ": 75,
                 "ردىء": 75,
@@ -43,7 +42,7 @@ OFFICIAL_INDICATORS = [
         "code": "strategic",
         "name_ar": "الأهمية الاستراتيجية للموقع",
         "name_en": "Strategic Importance",
-        "weight": 15,
+        "weight": 20,
         "normalization_method": "linear_scale",
         "always_provisional": False,
         "source_columns": ["الأهميه الأستراتيجيه"],
@@ -62,7 +61,7 @@ OFFICIAL_INDICATORS = [
         "always_provisional": False,
         "source_columns": ["سنة_الانشاء"],
         "rubric": {
-            "reference_year_source": "study.reference_year",
+            "reference_year": 2026,
             "bands": [
                 {"min": 0, "max": 20, "score": 20},
                 {"min": 20, "max": 40, "score": 50},
@@ -85,8 +84,8 @@ OFFICIAL_INDICATORS = [
         "source_columns": ["عدد_الوحدات", "عدد_العمارات", "المساحة_بالفدان"],
         "rubric": {"ratio": "units_per_feddan", "mode": "minmax"},
         "description": (
-            "كثافة = عدد الوحدات / المساحة بالفدان (أو عدد العمارات إذا تعذر). "
-            "تُطبَّع بمقياس أدنى-أعلى داخل مجموعة بيانات الدراسة الحالية (نسبي وليس مطلقًا)."
+            "الكثافة = عدد الوحدات السكنية / مساحة المشروع بالفدان فقط. "
+            "تُطبَّع بمقياس أدنى-أعلى داخل مجموعة المشروعات الثلاثين؛ لا يُستبدل عدد الوحدات بعدد العمارات."
         ),
     },
     {
@@ -98,27 +97,11 @@ OFFICIAL_INDICATORS = [
         "always_provisional": True,
         "source_columns": ["الامتدادات_بالعمارات", "نوع_الامتدادات", "هل_حدث_تغيير_في_استخدام_الدور_الارضي"],
         "rubric": {
-            "extension_type_map": {"لا يوجد": 0, "بلكونة": 30, "افقي ورأسي": 70},
-            "reconciliation_bonus": 15,
-            "reconciliation_keyword": "تصالح",
+            "presence_map": {"يوجد": 100, "لا يوجد": 0},
         },
         "description": (
             "يقيس مدى وجود امتدادات/تعديلات على التصميم الأصلي فقط، وليس شرعيتها. "
             "وجود امتداد لا يثبت أنه غير معتمد؛ يلزم تقييم سند الموافقة. دائمًا 'مبدئي'."
-        ),
-    },
-    {
-        "code": "urban_env",
-        "name_ar": "جودة البيئة العمرانية والفراغات العامة",
-        "name_en": "Urban Environment & Public Space Quality",
-        "weight": 5,
-        "normalization_method": "manual_assessment_only",
-        "always_provisional": False,
-        "source_columns": [],
-        "rubric": {},
-        "description": (
-            "لا تتوفر في المصدر قياسات للمساحات المفتوحة أو جودة الفراغات العامة. "
-            "بيانات ناقصة افتراضيًا حتى يُدخل مقيّم بيانات ميدانية موثقة بمصدرها."
         ),
     },
     {
