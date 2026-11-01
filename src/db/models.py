@@ -125,7 +125,7 @@ class Project(Base):
 
 
 class IndicatorConfig(Base):
-    """One of the 7 official indicators, or a user-added custom indicator."""
+    """One of the official indicators, or a user-added custom indicator."""
     __tablename__ = "indicator_configs"
     __table_args__ = (UniqueConstraint("study_id", "code", name="uq_study_indicator_code"),)
 
