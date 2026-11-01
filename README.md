@@ -50,3 +50,8 @@ python -m pytest tests/ -q
 تم التحقق من 30 اختبارًا بنجاح، بما فيها تشغيل الصفحة عبر Streamlit AppTest، البحث والتصفية والحالة الفارغة، مقارنة مشروعين لهما الاسم نفسه، استيراد 30 سجلًا، استبعاد المؤشر السابع، الحفاظ على الدراسات القديمة، وتطابق مجموع المساهمات مع الدرجة عند نقص البيانات.
 
 قاعدة SQLite المحلية تُنشأ في `data/housing_dss.sqlite3`. هذا لا يضمن دوام البيانات عبر إعادة بناء حاوية Streamlit Community Cloud؛ لا تُعامل ملفات تشغيل الحاوية كأرشيف دائم.
+
+
+## Updated scorecard (30-project scope)
+
+The active six-indicator scorecard uses weights of 35% structural condition, 20% strategic importance, 15% building age, 10% housing units per feddan (Min-Max normalized within the 30-project scope), 10% extensions presence, and 10% utility connections. The weights total 100%. Missing or unclear values are not converted to zero; a final priority score is shown only when all six indicators are scorable. Utility connection measures connection only, not service quality, and extension presence does not independently establish legal status.
