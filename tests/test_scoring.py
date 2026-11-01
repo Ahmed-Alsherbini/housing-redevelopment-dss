@@ -1,6 +1,7 @@
 """Unit tests for the MCDA scoring engine: correctness + 'never fabricate missing data'."""
 from __future__ import annotations
 
+from src.core.indicators import OFFICIAL_INDICATORS
 from src.core.scoring import (
     safety_flag, score_category_map, score_density_ratio, score_infrastructure_ratio,
     score_linear_scale, score_modification_extent, score_threshold_bands,
@@ -55,6 +56,25 @@ def test_density_ratio_relative_normalization():
     ctx = {"density_units": {"min": 10, "max": 110}}
     r = score_density_ratio(60, None, 1.0, rubric, ctx)
     assert abs(r.score - 50.0) < 0.01  # midpoint of [10,110]
+
+
+def test_density_uses_units_only_not_building_count_fallback():
+    r = score_density_ratio(None, 5, 1.0, {}, {"density_units": {"min": 10, "max": 100}})
+    assert r.score is None and r.status == "insufficient"
+
+
+def test_density_minmax_undefined_when_all_projects_have_same_density():
+    r = score_density_ratio(50, None, 1.0, {}, {"density_units": {"min": 50, "max": 50}})
+    assert r.score is None and r.status == "insufficient"
+
+
+def test_official_scorecard_weights_sum_to_100():
+    assert len(OFFICIAL_INDICATORS) == 6
+    assert sum(item["weight"] for item in OFFICIAL_INDICATORS) == 100
+    assert {item["code"]: item["weight"] for item in OFFICIAL_INDICATORS} == {
+        "structural": 35, "strategic": 20, "age": 15,
+        "density": 10, "modifications": 10, "infrastructure": 10,
+    }
 
 
 def test_density_ratio_missing_area_not_fabricated():
