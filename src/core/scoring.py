@@ -110,24 +110,20 @@ def score_threshold_bands(age_years: Optional[float], rubric: dict) -> Indicator
 
 def score_density_ratio(n_units, n_buildings, area_feddan, rubric: dict, dataset_ctx: dict) -> IndicatorResult:
     units = _to_float(n_units)
-    buildings = _to_float(n_buildings)
     area = _to_float(area_feddan)
     if not area or area <= 0:
         return IndicatorResult("", None, "insufficient", "", "المساحة بالفدان غير متوفرة أو صفر؛ تعذر حساب الكثافة.")
-    if units is not None:
-        ratio = units / area
-        pool = dataset_ctx.get("density_units", {})
-        metric_label = "وحدة/فدان"
-    elif buildings is not None:
-        ratio = buildings / area
-        pool = dataset_ctx.get("density_buildings", {})
-        metric_label = "عمارة/فدان"
-    else:
-        return IndicatorResult("", None, "insufficient", "", "عدد الوحدات وعدد العمارات غير متوفرين.")
+    if units is None or units < 0:
+        return IndicatorResult("", None, "insufficient", "", "عدد الوحدات السكنية غير متوفر أو غير صالح؛ لا يُستبدل بعدد العمارات.")
+    ratio = units / area
+    pool = dataset_ctx.get("density_units", {})
+    metric_label = "وحدة/فدان"
     lo, hi = pool.get("min"), pool.get("max")
-    if lo is None or hi is None or hi <= lo:
-        score = 50.0
-        note = " (قيمة وحيدة في المجموعة، تُسند درجة وسطى 50)"
+    if lo is None or hi is None:
+        return IndicatorResult("", None, "insufficient", f"{ratio:.1f} {metric_label}", "تعذر حساب نطاق Min-Max لعدم توفر كثافات صالحة في مجموعة الدراسة.")
+    if hi == lo:
+        score = 0.0
+        note = " (جميع المشاريع لها الكثافة نفسها؛ أُسندت درجة 0 لعدم وجود تباين نسبي)"
     else:
         score = max(0.0, min(100.0, (ratio - lo) / (hi - lo) * 100))
         note = ""
@@ -138,28 +134,26 @@ def score_density_ratio(n_units, n_buildings, area_feddan, rubric: dict, dataset
 
 
 def score_modification_extent(has_ext, ext_type, floor_change, rubric: dict) -> IndicatorResult:
-    ext_val = _clean(has_ext)
-    type_val = _clean(ext_type) or "لا يوجد"
-    floor_val = _clean(floor_change) or ""
-    type_map = rubric.get("extension_type_map", {})
-    if ext_val is None and type_val == "لا يوجد" and not floor_val:
-        return IndicatorResult("", None, "insufficient", "", "لا توجد بيانات عن الامتدادات أو التعديلات.")
-    score = float(type_map.get(type_val, 0))
-    explanation = f"نوع الامتداد: '{type_val}' → {score:.0f}/100 (مدى التعديل، وليس حكمًا بعدم الشرعية)."
-    kw = rubric.get("reconciliation_keyword", "تصالح")
-    if kw in floor_val:
-        bonus = rubric.get("reconciliation_bonus", 0)
-        score = min(100.0, score + bonus)
-        explanation += f" + تعديل مسجل بالدور الأرضي ({floor_val}) أضاف {bonus} نقطة."
-    return IndicatorResult("", score, "provisional", f"{type_val} | {floor_val or '—'}", explanation)
+    raw = _clean(has_ext)
+    presence_map = rubric.get("presence_map", {"يوجد": 100, "لا يوجد": 0})
+    if raw is None:
+        return IndicatorResult("", None, "insufficient", "", "بيانات وجود الامتدادات مفقودة أو غير واضحة؛ لم تُحتسب.")
+    normalized = raw.strip()
+    score = presence_map.get(normalized)
+    if score is None:
+        return IndicatorResult("", None, "insufficient", raw, f"قيمة غير معروفة لحالة الامتدادات: '{raw}'؛ لم تُحتسب.")
+    explanation = f"حالة الامتدادات '{normalized}' تقابل {score}/100 حسب جدول التقييم. وجود امتداد لا يثبت وحده عدم اعتماده قانونيًا."
+    return IndicatorResult("", float(score), "provisional", normalized, explanation)
 
 
 def score_infrastructure_ratio(elec, water, sewage, gas, rubric: dict) -> IndicatorResult:
     fields = [elec, water, sewage, gas]
     connected_values = set(rubric.get("connected_values", ["متصل"]))
     cleaned = [_clean(f) for f in fields]
-    if all(c is None for c in cleaned):
-        return IndicatorResult("", None, "insufficient", "", "لا توجد بيانات اتصال بالمرافق.")
+    if any(c is None for c in cleaned):
+        known_connected = sum(1 for c in cleaned if c in connected_values)
+        missing = sum(1 for c in cleaned if c is None)
+        return IndicatorResult("", None, "insufficient", f"{known_connected} متصل؛ {missing} غير معروف", "بيانات اتصال بعض المرافق مفقودة؛ لا يُفترض أن المرفق المجهول غير متصل.")
     total = rubric.get("utilities", 4)
     connected = sum(1 for c in cleaned if c in connected_values)
     score = (connected / total) * 100
@@ -189,14 +183,10 @@ def compute_dataset_context(projects: list) -> dict:
         if not area or area <= 0:
             continue
         units = _to_float(p.n_units)
-        bld = _to_float(p.n_buildings)
-        if units is not None:
+        if units is not None and units >= 0:
             units_ratios.append(units / area)
-        elif bld is not None:
-            bld_ratios.append(bld / area)
     ctx = {
         "density_units": {"min": min(units_ratios), "max": max(units_ratios)} if units_ratios else {},
-        "density_buildings": {"min": min(bld_ratios), "max": max(bld_ratios)} if bld_ratios else {},
     }
     return ctx
 
@@ -217,8 +207,8 @@ def compute_indicator_result(project, indicator_cfg, study, dataset_ctx: dict,
         r = score_linear_scale(project.strategic_importance_raw, rubric)
     elif method == "threshold_bands":
         cy = _to_float(project.construction_year)
-        ref_year = study.reference_year
-        age = (ref_year - cy) if (cy is not None and ref_year) else None
+        ref_year = rubric.get("reference_year", study.reference_year)
+        age = (ref_year - cy) if (cy is not None and ref_year and cy <= ref_year) else None
         r = score_threshold_bands(age, rubric)
     elif method == "density_ratio":
         r = score_density_ratio(project.n_units, project.n_buildings, project.area_feddan, rubric, dataset_ctx)
@@ -279,7 +269,9 @@ def compute_composite(project, indicator_cfgs: list, study, dataset_ctx: dict,
 
     total_weight = sum(w for w in weights.values() if w > 0) or 1.0
     completeness_pct = round(available_weight / total_weight * 100, 1)
-    denominator = 100.0 if settings.get("preserve_original_weights") else available_weight
+    # Official scorecard: missing indicators remain missing and do not cause
+    # the remaining weights to be silently redistributed.
+    denominator = 100.0
     priority_score = round(weighted_sum / denominator, 2) if available_weight > 0 else None
 
     # Reconcile contributions with the same denominator used by the composite.
