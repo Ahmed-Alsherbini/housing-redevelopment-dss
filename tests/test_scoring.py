@@ -62,18 +62,14 @@ def test_density_ratio_missing_area_not_fabricated():
     assert r.score is None and r.status == "insufficient"
 
 
-def test_modification_extent_always_provisional_and_not_illegal_by_default():
-    rubric = {"extension_type_map": {"لا يوجد": 0, "بلكونة": 30, "افقي ورأسي": 70},
-              "reconciliation_bonus": 15, "reconciliation_keyword": "تصالح"}
-    r = score_modification_extent("يوجد", "افقي ورأسي", "لا يوجد", rubric)
-    assert r.score == 70
-    assert r.status == "provisional"  # presence != proven unauthorized
-
-
-def test_modification_extent_reconciliation_bonus():
-    rubric = {"extension_type_map": {"بلكونة": 30}, "reconciliation_bonus": 15, "reconciliation_keyword": "تصالح"}
-    r = score_modification_extent("يوجد", "بلكونة", "4 تصالح", rubric)
-    assert r.score == 45
+def test_modification_presence_map_matches_official_scorecard():
+    rubric = {"presence_map": {"يوجد": 100, "لا يوجد": 0}}
+    yes = score_modification_extent("يوجد", None, None, rubric)
+    no = score_modification_extent("لا يوجد", None, None, rubric)
+    missing = score_modification_extent("مفقود أو غير واضح", None, None, rubric)
+    assert yes.score == 100 and yes.status == "provisional"
+    assert no.score == 0 and no.status == "provisional"
+    assert missing.score is None and missing.status == "insufficient"
 
 
 def test_infrastructure_connection_not_quality():
@@ -82,6 +78,13 @@ def test_infrastructure_connection_not_quality():
     assert r.score == 100
     assert r.status == "provisional"  # connection presence only, not verified service quality
     assert "جودة" in r.explanation or "كفاءة" in r.explanation
+
+
+def test_infrastructure_missing_values_are_not_counted_as_disconnected():
+    r = score_infrastructure_ratio("متصل", None, "متصل", "غير متصل",
+                                   {"connected_values": ["متصل"], "utilities": 4})
+    assert r.score is None
+    assert r.status == "insufficient"
 
 
 def test_safety_flag_critical_for_removal_decision():
