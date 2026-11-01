@@ -7,6 +7,7 @@ import json
 import streamlit as st
 
 from src.core.scoring import composite_dataframe
+from src.core.indicators import OFFICIAL_INDICATORS
 from src.db.database import get_session, init_db
 from src.importers.excel_import import apply_mapping, load_tabular_file, suggest_mapping
 from src.services import project_service, study_service
@@ -50,18 +51,35 @@ def _bootstrap_initial_study(session) -> None:
     """
     existing = next((s for s in study_service.list_studies(session) if s.name == SCOPE_STUDY_NAME), None)
     if existing:
-        if existing.settings().get("scope_weight_version") != "strategic-20-v1":
-            study_service.restore_official_weights(session, existing.id)
-            for cfg in study_service.list_indicators(session, existing.id):
-                if cfg.code == "strategic":
-                    cfg.weight = 20
-                elif cfg.code == "urban_env":
-                    cfg.is_active = False
-            settings = existing.settings()
-            settings["preserve_original_weights"] = True
-            settings["scope_weight_version"] = "strategic-20-v1"
-            existing.settings_json = json.dumps(settings, ensure_ascii=False)
-            session.commit()
+        # Keep the persistent study aligned with the current scorecard on app restart.
+        baseline = {item["code"]: item for item in OFFICIAL_INDICATORS}
+        for cfg in study_service.list_indicators(session, existing.id):
+            if cfg.code == "urban_env":
+                cfg.is_active = False
+            if cfg.code in baseline:
+                item = baseline[cfg.code]
+                cfg.weight = item["weight"]
+                cfg.normalization_method = item["normalization_method"]
+                cfg.rubric_json = json.dumps(item["rubric"], ensure_ascii=False)
+                cfg.source_columns_json = json.dumps(item["source_columns"], ensure_ascii=False)
+                cfg.description = item["description"]
+                cfg.always_provisional = item["always_provisional"]
+        settings = existing.settings()
+        settings.update({
+            "preserve_original_weights": True,
+            "scope_weight_version": "scorecard-v2",
+            "excluded_indicator_codes": ["urban_env"],
+            "scope_model_version": "six-indicators-v2",
+        })
+        existing.settings_json = json.dumps(settings, ensure_ascii=False)
+        # Keep the saved baseline scenario synchronized too.
+        for scenario in existing.scenarios:
+            if scenario.is_baseline:
+                scenario.weights_json = json.dumps(
+                    {item["code"]: item["weight"] for item in OFFICIAL_INDICATORS},
+                    ensure_ascii=False,
+                )
+        session.commit()
         return
     if not os.path.exists(SCOPE_FILE):
         raise FileNotFoundError("ملف نطاق الدراسة المعتمد غير موجود: " + SCOPE_FILE)
@@ -85,10 +103,8 @@ def _bootstrap_initial_study(session) -> None:
         for cfg in study_service.list_indicators(session, study.id):
             if cfg.code == "urban_env":
                 cfg.is_active = False
-            elif cfg.code == "strategic":
-                cfg.weight = 20
         settings = study.settings()
-        settings.update({"excluded_indicator_codes": ["urban_env"], "scope_model_version": "six-indicators-v1", "preserve_original_weights": True, "scope_weight_version": "strategic-20-v1"})
+        settings.update({"excluded_indicator_codes": ["urban_env"], "scope_model_version": "six-indicators-v2", "preserve_original_weights": True, "scope_weight_version": "scorecard-v2"})
         study.settings_json = json.dumps(settings, ensure_ascii=False)
         session.commit()
     except Exception:
