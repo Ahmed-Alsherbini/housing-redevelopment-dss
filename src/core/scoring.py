@@ -122,11 +122,9 @@ def score_density_ratio(n_units, n_buildings, area_feddan, rubric: dict, dataset
     if lo is None or hi is None:
         return IndicatorResult("", None, "insufficient", f"{ratio:.1f} {metric_label}", "تعذر حساب نطاق Min-Max لعدم توفر كثافات صالحة في مجموعة الدراسة.")
     if hi == lo:
-        score = 0.0
-        note = " (جميع المشاريع لها الكثافة نفسها؛ أُسندت درجة 0 لعدم وجود تباين نسبي)"
-    else:
-        score = max(0.0, min(100.0, (ratio - lo) / (hi - lo) * 100))
-        note = ""
+        return IndicatorResult("", None, "insufficient", f"{ratio:.1f} {metric_label}", "لا يوجد تباين بين كثافات المشاريع؛ معادلة Min-Max غير معرّفة ولا يمكن إسناد درجة نسبية.")
+    score = max(0.0, min(100.0, (ratio - lo) / (hi - lo) * 100))
+    note = ""
     return IndicatorResult(
         "", score, "validated", f"{ratio:.1f} {metric_label}",
         f"كثافة {ratio:.1f} {metric_label}، طُبِّعت نسبيًا ضمن مدى الدراسة الحالية [{lo}-{hi}]{note}.",
