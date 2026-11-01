@@ -6,10 +6,7 @@ each new Study's IndicatorConfig rows, where they may be freely edited per-study
 ("the original official indicator weights must remain available as an unchanged
 baseline" per the spec).
 
-Rubrics are intentionally conservative: where the source data cannot support a
-measurement (e.g. urban environment / public space quality has no column in the
-dataset), the indicator is marked manual_assessment_only -> Insufficient Data
-until a user supplies a verified manual assessment.
+Missing or unclear source data remain unscored; no value is silently inferred.
 """
 from __future__ import annotations
 
@@ -25,6 +22,7 @@ OFFICIAL_INDICATORS = [
         "rubric": {
             "map": {
                 "متوسط": 50,
+                "رديء": 75,
                 "ردئ": 75,
                 "ردىء": 75,
                 "متهالك": 90,
@@ -70,8 +68,8 @@ OFFICIAL_INDICATORS = [
             ],
         },
         "description": (
-            "العمر = سنة مرجعية (قابلة للتعديل في إعدادات الدراسة) - سنة الإنشاء. "
-            "يُحوَّل إلى درجة عبر نطاقات عمرية قابلة للتهيئة، ولا يُفترض أن العمر وحده يعني التدهور."
+            "العمر = 2026 - سنة الإنشاء. الفئات: أقل من 20 سنة = 20/100؛ "
+            "20 إلى أقل من 40 = 50؛ 40 إلى أقل من 60 = 75؛ 60 سنة فأكثر = 100."
         ),
     },
     {
@@ -100,8 +98,8 @@ OFFICIAL_INDICATORS = [
             "presence_map": {"يوجد": 100, "لا يوجد": 0},
         },
         "description": (
-            "يقيس مدى وجود امتدادات/تعديلات على التصميم الأصلي فقط، وليس شرعيتها. "
-            "وجود امتداد لا يثبت أنه غير معتمد؛ يلزم تقييم سند الموافقة. دائمًا 'مبدئي'."
+            "يوجد امتدادات = 100/100؛ لا يوجد = 0/100؛ المفقود أو غير الواضح لا يُحتسب. "
+            "وجود امتداد لا يثبت وحده أنه غير معتمد قانونيًا؛ التقييم مبدئي."
         ),
     },
     {
