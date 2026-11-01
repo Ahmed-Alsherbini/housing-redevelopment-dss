@@ -146,7 +146,9 @@ def render(session, study) -> None:
         weights = pd.DataFrame({"المؤشر": [i.name_ar for i in indicators],
                                 "الوزن النسبي %": [i.weight for i in indicators]})
         st.dataframe(weights, hide_index=True, use_container_width=True)
-        st.write("درجة الأولوية = مجموع (درجة المؤشر × وزنه ÷ 100).")
+        st.write("النقاط الموزونة لكل مؤشر = الدرجة من 100 × الوزن ÷ 100.")
+        st.write("الأوزان المعتمدة: الحالة الإنشائية 35%، الأهمية الاستراتيجية 20%، العمر 15%، كثافة الوحدات 10%، الامتدادات 10%، والمرافق 10% (المجموع 100%).")
+        st.write("لا تُعاد قسمة الأوزان عند نقص البيانات. تظهر مساهمات المؤشرات المتاحة، لكن لا تُعرض درجة نهائية من 100 إلا عند اكتمال المؤشرات الستة.")
 
 
 def _detail(project, row, indicators, study) -> None:
