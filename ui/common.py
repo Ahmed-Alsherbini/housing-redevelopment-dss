@@ -18,7 +18,8 @@ SAMPLE_FILE_30 = os.path.join(DATA_DIR, "PortSaid_30_Projects_for_Claude.xlsx")
 
 STUDY_NAME_29 = "بورسعيد - 29 مشروعًا (الدراسة النشطة)"
 STUDY_NAME_30 = "بورسعيد - 30 مشروع (دراسة الحالة الأولى)"
-SCOPE_FILE = os.path.join(DATA_DIR, "PortSaid_Scope_2026-10-27.xlsx")
+SCOPE_FILE = os.path.join(DATA_DIR, "PortSaid_30_Projects_Updated_2026-11-01.csv")
+SCOPE_DATASET_VERSION = "updated-2026-11-01-v1"
 SCOPE_STUDY_NAME = "بورسعيد — نطاق الدراسة المعتمد (30 مشروعًا)"
 SCOPE_CONDITIONS = {"متوسط", "ردئ", "متهالك", "ردئ ومتهالك"}
 
@@ -44,13 +45,31 @@ def _seed_study_from_file(session, name: str, description: str, sample_file: str
 
 
 def _bootstrap_initial_study(session) -> None:
-    """Import the corrected 30-record scope as a separate, non-destructive study.
-
-    Sheet1 contains 108 records. Sheet2 is a pivot and is never imported.
-    The immutable official baseline remains available for comparison.
-    """
+    """Load the approved 30-project source dataset and keep its version auditable."""
     existing = next((s for s in study_service.list_studies(session) if s.name == SCOPE_STUDY_NAME), None)
     if existing:
+        settings = existing.settings()
+        if settings.get("source_dataset_version") != SCOPE_DATASET_VERSION:
+            if not os.path.exists(SCOPE_FILE):
+                raise FileNotFoundError("ملف البيانات المحدّث غير موجود: " + SCOPE_FILE)
+            with open(SCOPE_FILE, "rb") as f:
+                loaded = load_tabular_file(f.read(), os.path.basename(SCOPE_FILE))
+            df = loaded["sheets"]["data"]
+            records = apply_mapping(df, suggest_mapping(list(df.columns)))
+            if len(records) != 30 or len({str(r["external_id"]) for r in records}) != 30:
+                raise ValueError("ملف البيانات المحدّث لا يطابق النطاق المتوقع: 30 سجلًا ومعرفًا فريدًا.")
+            result = project_service.import_records(
+                session, existing, records, os.path.basename(SCOPE_FILE),
+                "البيانات المحدّثة — 30 مشروعًا (2026-11-01)", "replace_all",
+            )
+            if not result["ok"]:
+                raise ValueError("تعذر استيراد ملف البيانات المحدّث: " + str(result.get("issues", [])))
+            settings = existing.settings()
+            settings["source_dataset_version"] = SCOPE_DATASET_VERSION
+            settings["source_dataset_file"] = os.path.basename(SCOPE_FILE)
+            existing.settings_json = json.dumps(settings, ensure_ascii=False)
+            session.commit()
+
         # Keep the persistent study aligned with the current scorecard on app restart.
         baseline = {item["code"]: item for item in OFFICIAL_INDICATORS}
         for cfg in study_service.list_indicators(session, existing.id):
@@ -82,29 +101,28 @@ def _bootstrap_initial_study(session) -> None:
         session.commit()
         return
     if not os.path.exists(SCOPE_FILE):
-        raise FileNotFoundError("ملف نطاق الدراسة المعتمد غير موجود: " + SCOPE_FILE)
+        raise FileNotFoundError("ملف البيانات المحدّث غير موجود: " + SCOPE_FILE)
     with open(SCOPE_FILE, "rb") as f:
         loaded = load_tabular_file(f.read(), os.path.basename(SCOPE_FILE))
-    df = loaded["sheets"]["Sheet1"]
-    df = df[df["الحالة_العامة_للمبني"].astype(str).str.strip().isin(SCOPE_CONDITIONS)]
+    df = loaded["sheets"]["data"]
     records = apply_mapping(df, suggest_mapping(list(df.columns)))
-    if len(records) != 30 or len({r["external_id"] for r in records}) != 30:
-        raise ValueError("ملف المصدر لا يطابق نطاق الدراسة المتوقع: 30 معرفًا فريدًا.")
+    if len(records) != 30 or len({str(r["external_id"]) for r in records}) != 30:
+        raise ValueError("ملف البيانات المحدّث لا يطابق النطاق المتوقع: 30 سجلًا ومعرفًا فريدًا.")
     study = study_service.create_study(
         session, SCOPE_STUDY_NAME,
-        "نطاق الدراسة: متوسط، ردئ، متهالك، وردئ ومتهالك. المصدر المعتمد بتاريخ 27 أكتوبر 2026.",
+        "نطاق الدراسة: 30 مشروعًا من ملف البيانات المحدّث بتاريخ 1 نوفمبر 2026.",
         2026,
     )
     try:
         project_service.import_records(
             session, study, records, os.path.basename(SCOPE_FILE),
-            "نطاق الدراسة المعتمد — 30 مشروعًا", "merge",
+            "البيانات المحدّثة — 30 مشروعًا (2026-11-01)", "merge",
         )
         for cfg in study_service.list_indicators(session, study.id):
             if cfg.code == "urban_env":
                 cfg.is_active = False
         settings = study.settings()
-        settings.update({"excluded_indicator_codes": ["urban_env"], "scope_model_version": "six-indicators-v2", "preserve_original_weights": True, "scope_weight_version": "scorecard-v2"})
+        settings.update({"excluded_indicator_codes": ["urban_env"], "scope_model_version": "six-indicators-v2", "preserve_original_weights": True, "scope_weight_version": "scorecard-v2", "source_dataset_version": SCOPE_DATASET_VERSION, "source_dataset_file": os.path.basename(SCOPE_FILE)})
         study.settings_json = json.dumps(settings, ensure_ascii=False)
         session.commit()
     except Exception:
