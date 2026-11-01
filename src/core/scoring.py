@@ -265,7 +265,10 @@ def compute_composite(project, indicator_cfgs: list, study, dataset_ctx: dict,
             if w >= settings["dominant_indicator_min_weight"]:
                 dominant_missing = True
 
-    total_weight = sum(w for w in weights.values() if w > 0) or 1.0
+    total_weight = sum(
+        weights.get(cfg.code, 0.0) for cfg in active_cfgs
+        if weights.get(cfg.code, 0.0) > 0
+    ) or 1.0
     completeness_pct = round(available_weight / total_weight * 100, 1)
     # Official scorecard: missing indicators remain missing and do not cause
     # the remaining weights to be silently redistributed.
