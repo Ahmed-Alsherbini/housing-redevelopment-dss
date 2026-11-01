@@ -78,7 +78,12 @@ def test_corrected_scope_bootstrap_preserves_old_studies(tmp_path, monkeypatch):
     assert len(full) > 0
     for row in scores.itertuples():
         contributions = [getattr(row, "contrib_" + c.code) for c in active]
-        assert sum(v for v in contributions if v is not None and v == v) == pytest.approx(row.priority_score, abs=.04)
+        total_contribution = sum(v for v in contributions if v is not None and v == v)
+        if row.completeness_pct == 100:
+            assert row.priority_score is not None
+            assert total_contribution == pytest.approx(row.priority_score, abs=.04)
+        else:
+            assert row.priority_score is None
     # Upgrade never edits or combines an existing study.
     legacy = study_service.create_study(session, ui_common.STUDY_NAME_29, reference_year=2026)
     project_service.add_project(session, legacy, {"external_id": "legacy", "site_name": "untouched"})
