@@ -53,9 +53,12 @@ def test_threshold_bands_age():
 
 def test_density_ratio_relative_normalization():
     rubric = {"ratio": "units_per_feddan", "mode": "minmax"}
-    ctx = {"density_units": {"min": 10, "max": 110}}
-    r = score_density_ratio(60, None, 1.0, rubric, ctx)
-    assert abs(r.score - 50.0) < 0.01  # midpoint of [10,110]
+    ctx = {
+        "density_units": {"min": 10, "max": 110},
+        "density_buildings": {"min": 1, "max": 11},
+    }
+    r = score_density_ratio(60, 6, 1.0, rubric, ctx)
+    assert abs(r.score - 50.0) < 0.01  # both normalized components are at midpoint
 
 
 def test_density_uses_units_only_not_building_count_fallback():
@@ -63,9 +66,14 @@ def test_density_uses_units_only_not_building_count_fallback():
     assert r.score is None and r.status == "insufficient"
 
 
-def test_density_minmax_undefined_when_all_projects_have_same_density():
-    r = score_density_ratio(50, None, 1.0, {}, {"density_units": {"min": 50, "max": 50}})
-    assert r.score is None and r.status == "insufficient"
+def test_density_equal_range_uses_neutral_score():
+    ctx = {
+        "density_units": {"min": 50, "max": 50},
+        "density_buildings": {"min": 5, "max": 5},
+    }
+    r = score_density_ratio(50, 5, 1.0, {}, ctx)
+    assert r.score == 50 and r.status == "validated"
+    assert "محايدة 50" in r.explanation
 
 
 def test_official_scorecard_weights_sum_to_100():
@@ -80,6 +88,27 @@ def test_official_scorecard_weights_sum_to_100():
 def test_density_ratio_missing_area_not_fabricated():
     r = score_density_ratio(60, 5, None, {}, {})
     assert r.score is None and r.status == "insufficient"
+
+
+def test_composite_density_requires_both_inputs():
+    ctx = {
+        "density_units": {"min": 10, "max": 100},
+        "density_buildings": {"min": 1, "max": 10},
+    }
+    r = score_density_ratio(None, 5, 1.0, {}, ctx)
+    assert r.score is None and r.status == "insufficient"
+
+
+def test_composite_density_uses_equal_weight_components():
+    ctx = {
+        "density_units": {"min": 0, "max": 100},
+        "density_buildings": {"min": 0, "max": 10},
+    }
+    r = score_density_ratio(25, 8, 1.0, {}, ctx)
+    # Unit density normalizes to 25; building density normalizes to 80.
+    assert abs(r.score - 52.5) < 0.01
+    assert "25.00 وحدة/فدان" in r.raw_value
+    assert "8.00 عمارة/فدان" in r.raw_value
 
 
 def test_modification_presence_map_matches_official_scorecard():
