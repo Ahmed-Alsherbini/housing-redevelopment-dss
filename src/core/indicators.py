@@ -81,10 +81,10 @@ OFFICIAL_INDICATORS = [
         "normalization_method": "density_ratio",
         "always_provisional": False,
         "source_columns": ["عدد_الوحدات", "عدد_العمارات", "المساحة_بالفدان"],
-        "rubric": {"ratio": "units_per_feddan", "mode": "minmax"},
+        "rubric": {"ratio": "composite_density", "building_weight": 0.5, "units_weight": 0.5, "mode": "minmax"},
         "description": (
-            "الكثافة = عدد الوحدات السكنية / مساحة المشروع بالفدان فقط. "
-            "تُطبَّع بمقياس أدنى-أعلى داخل مجموعة المشروعات الثلاثين؛ لا يُستبدل عدد الوحدات بعدد العمارات."
+            "مؤشر مركّب يساوي 50% من كثافة العمارات و50% من كثافة الوحدات السكنية، بعد تطبيع كل منهما إلى 0-100 بمقياس Min-Max. "
+            "يتطلب المؤشر توفر العددين والمساحة الصالحة؛ لا تُستبدل البيانات الناقصة بصفر."
         ),
     },
     {
