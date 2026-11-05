@@ -108,27 +108,53 @@ def score_threshold_bands(age_years: Optional[float], rubric: dict) -> Indicator
     return IndicatorResult("", 100.0, "validated", f"{age_years:.0f} سنة", "العمر يتجاوز كل النطاقات المعرفة → 100/100.")
 
 
-def score_density_ratio(n_units, n_buildings, area_feddan, rubric: dict, dataset_ctx: dict) -> IndicatorResult:
-    units = _to_float(n_units)
-    area = _to_float(area_feddan)
-    if not area or area <= 0:
-        return IndicatorResult("", None, "insufficient", "", "المساحة بالفدان غير متوفرة أو صفر؛ تعذر حساب الكثافة.")
-    if units is None or units < 0:
-        return IndicatorResult("", None, "insufficient", "", "عدد الوحدات السكنية غير متوفر أو غير صالح؛ لا يُستبدل بعدد العمارات.")
-    ratio = units / area
-    pool = dataset_ctx.get("density_units", {})
-    metric_label = "وحدة/فدان"
+def _minmax_density_score(ratio: float, pool: dict) -> tuple[Optional[float], str]:
     lo, hi = pool.get("min"), pool.get("max")
     if lo is None or hi is None:
-        return IndicatorResult("", None, "insufficient", f"{ratio:.1f} {metric_label}", "تعذر حساب نطاق Min-Max لعدم توفر كثافات صالحة في مجموعة الدراسة.")
+        return None, "لا توجد كثافات صالحة كافية لتطبيع المؤشر."
+    if hi < lo:
+        return None, "نطاق الكثافة غير صالح."
     if hi == lo:
-        return IndicatorResult("", None, "insufficient", f"{ratio:.1f} {metric_label}", "لا يوجد تباين بين كثافات المشاريع؛ معادلة Min-Max غير معرّفة ولا يمكن إسناد درجة نسبية.")
-    score = max(0.0, min(100.0, (ratio - lo) / (hi - lo) * 100))
-    note = ""
-    return IndicatorResult(
-        "", score, "validated", f"{ratio:.1f} {metric_label}",
-        f"كثافة {ratio:.1f} {metric_label}، طُبِّعت نسبيًا ضمن مدى الدراسة الحالية [{lo}-{hi}]{note}.",
-    )
+        return 50.0, "لا يوجد تباين بين المشروعات؛ أُسندت درجة محايدة 50/100."
+    return max(0.0, min(100.0, (ratio - lo) / (hi - lo) * 100)), ""
+
+
+def score_density_ratio(n_units, n_buildings, area_feddan, rubric: dict, dataset_ctx: dict) -> IndicatorResult:
+    """Equal-weight composite of normalized units and building densities."""
+    units = _to_float(n_units)
+    buildings = _to_float(n_buildings)
+    area = _to_float(area_feddan)
+    if area is None or area <= 0:
+        return IndicatorResult("", None, "insufficient", "", "المساحة بالفدان غير متوفرة أو غير صالحة؛ تعذر حساب الكثافة.")
+    if units is None or units < 0 or buildings is None or buildings < 0:
+        return IndicatorResult("", None, "insufficient", "", "عدد الوحدات السكنية وعدد العمارات كلاهما مطلوبان؛ لا تُستبدل البيانات الناقصة بصفر أو بالمؤشر الآخر.")
+    units_ratio = units / area
+    buildings_ratio = buildings / area
+    units_score, units_note = _minmax_density_score(units_ratio, dataset_ctx.get("density_units", {}))
+    buildings_score, buildings_note = _minmax_density_score(buildings_ratio, dataset_ctx.get("density_buildings", {}))
+    if units_score is None or buildings_score is None:
+        notes = " ".join(note for note in (buildings_note, units_note) if note)
+        return IndicatorResult("", None, "insufficient",
+            f"{buildings_ratio:.2f} عمارة/فدان؛ {units_ratio:.2f} وحدة/فدان",
+            notes or "تعذر تطبيع أحد مكوّنَي الكثافة.")
+    building_weight = float(rubric.get("building_weight", 0.5))
+    units_weight = float(rubric.get("units_weight", 0.5))
+    weight_total = building_weight + units_weight
+    if building_weight < 0 or units_weight < 0 or weight_total <= 0:
+        return IndicatorResult("", None, "insufficient", "", "أوزان مكوّنَي مؤشر الكثافة غير صالحة.")
+    building_weight /= weight_total
+    units_weight /= weight_total
+    score = building_score * building_weight + units_score * units_weight
+    raw = (f"{buildings_ratio:.2f} عمارة/فدان (درجة {buildings_score:.1f}/100)؛ "
+           f"{units_ratio:.2f} وحدة/فدان (درجة {units_score:.1f}/100)")
+    explanation = (
+        f"مؤشر الكثافة المركّب = {building_weight:.0%} × درجة كثافة العمارات "
+        f"({buildings_score:.1f}) + {units_weight:.0%} × درجة كثافة الوحدات "
+        f"({units_score:.1f}) = {score:.1f}/100. "
+        f"التطبيع Min-Max مستقل لكل مكوّن ضمن مجموعة الدراسة. "
+        f"{' '.join(note for note in (buildings_note, units_note) if note)}"
+    ).strip()
+    return IndicatorResult("", score, "validated", raw, explanation)
 
 
 def score_modification_extent(has_ext, ext_type, floor_change, rubric: dict) -> IndicatorResult:
@@ -178,13 +204,17 @@ def compute_dataset_context(projects: list) -> dict:
         if p.is_archived:
             continue
         area = _to_float(p.area_feddan)
-        if not area or area <= 0:
+        if area is None or area <= 0:
             continue
         units = _to_float(p.n_units)
+        buildings = _to_float(p.n_buildings)
         if units is not None and units >= 0:
             units_ratios.append(units / area)
+        if buildings is not None and buildings >= 0:
+            bld_ratios.append(buildings / area)
     ctx = {
         "density_units": {"min": min(units_ratios), "max": max(units_ratios)} if units_ratios else {},
+        "density_buildings": {"min": min(bld_ratios), "max": max(bld_ratios)} if bld_ratios else {},
     }
     return ctx
 
