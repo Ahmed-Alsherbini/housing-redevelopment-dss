@@ -144,7 +144,7 @@ def score_density_ratio(n_units, n_buildings, area_feddan, rubric: dict, dataset
         return IndicatorResult("", None, "insufficient", "", "أوزان مكوّنَي مؤشر الكثافة غير صالحة.")
     building_weight /= weight_total
     units_weight /= weight_total
-    score = building_score * building_weight + units_score * units_weight
+    score = buildings_score * building_weight + units_score * units_weight
     raw = (f"{buildings_ratio:.2f} عمارة/فدان (درجة {buildings_score:.1f}/100)؛ "
            f"{units_ratio:.2f} وحدة/فدان (درجة {units_score:.1f}/100)")
     explanation = (
